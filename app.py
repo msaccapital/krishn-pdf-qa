@@ -11,6 +11,11 @@ from krishn_system import EnhancedPDFProcessor, HybridVectorDB, EnhancedAnswerGe
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 import torch
 
+# Set cache directories for Hugging Face models
+os.environ['TRANSFORMERS_CACHE'] = '/opt/render/.cache/huggingface'
+os.environ['HF_HUB_CACHE'] = '/opt/render/.cache/huggingface'
+os.environ['HF_HOME'] = '/opt/render/.cache/huggingface'
+
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all domains
 
@@ -27,25 +32,33 @@ class KRISHNBackend:
     def initialize_system(self):
         """Initialize the KRISHN system with Mistral model"""
         try:
-            logger.info("Initializing KRISHN system...")
+            logger.info("🚀 Initializing KRISHN system with Mistral 7B...")
             
-            # Load model
+            # Create cache directory if it doesn't exist
+            os.makedirs('/opt/render/.cache/huggingface', exist_ok=True)
+            
+            # Load model with optimizations
             model_name = "mistralai/Mistral-7B-Instruct-v0.2"
             
-            logger.info("Loading tokenizer...")
-            tokenizer = AutoTokenizer.from_pretrained(model_name)
+            logger.info("📥 Loading tokenizer...")
+            tokenizer = AutoTokenizer.from_pretrained(
+                model_name,
+                cache_dir='/opt/render/.cache/huggingface'
+            )
             tokenizer.pad_token = tokenizer.eos_token
             
-            logger.info("Loading model...")
+            logger.info("📥 Loading model (this may take 10-15 minutes)...")
             model = AutoModelForCausalLM.from_pretrained(
                 model_name,
                 torch_dtype=torch.float16,
                 device_map="auto",
                 load_in_4bit=True,
-                trust_remote_code=True
+                trust_remote_code=True,
+                cache_dir='/opt/render/.cache/huggingface',
+                low_cpu_mem_usage=True  # Add memory optimization
             )
             
-            logger.info("Creating pipeline...")
+            logger.info("🔧 Creating pipeline...")
             mistral_pipeline = pipeline(
                 "text-generation",
                 model=model,
@@ -60,10 +73,10 @@ class KRISHNBackend:
             self.answer_gen = EnhancedAnswerGenerator(self.vector_db, mistral_pipeline)
             
             self.is_initialized = True
-            logger.info("KRISHN system initialized successfully!")
+            logger.info("✅ KRISHN system initialized successfully!")
             
         except Exception as e:
-            logger.error(f"Failed to initialize system: {e}")
+            logger.error(f"❌ Failed to initialize system: {e}")
             self.is_initialized = False
     
     def process_uploaded_pdfs(self, pdf_files):
@@ -124,7 +137,8 @@ def health_check():
     return jsonify({
         "status": "healthy",
         "service": "KRISHN Enhanced PDF QA System",
-        "initialized": krishn_backend.is_initialized
+        "initialized": krishn_backend.is_initialized,
+        "model": "Mistral-7B-Instruct-v0.2"
     })
 
 @app.route('/api/initialize', methods=['POST'])
@@ -134,7 +148,8 @@ def initialize_system():
         krishn_backend.initialize_system()
         return jsonify({
             "success": krishn_backend.is_initialized,
-            "message": "System initialized successfully" if krishn_backend.is_initialized else "Initialization failed"
+            "message": "System initialized successfully" if krishn_backend.is_initialized else "Initialization failed - check logs",
+            "model_loaded": krishn_backend.is_initialized
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -231,13 +246,14 @@ def get_status():
     return jsonify({
         "initialized": krishn_backend.is_initialized,
         "uploaded_documents": krishn_backend.uploaded_files,
-        "system_ready": krishn_backend.is_initialized and len(krishn_backend.uploaded_files) > 0
+        "system_ready": krishn_backend.is_initialized and len(krishn_backend.uploaded_files) > 0,
+        "model": "Mistral-7B-Instruct-v0.2"
     })
 
 if __name__ == '__main__':
     # Initialize system on startup
-    print("🚀 Starting KRISHN PDF QA System...")
-    krishn_backend.initialize_system()
+    print("🚀 Starting KRISHN PDF QA System with Mistral 7B...")
+    print("📥 Model will load on first request (may take 10-15 minutes)...")
     
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)

@@ -30,14 +30,14 @@ class KRISHNBackend:
         self.uploaded_files = []
         
     def initialize_system(self):
-        """Initialize the KRISHN system with Mistral model"""
+        """Initialize the KRISHN system with Mistral model (CPU compatible)"""
         try:
-            logger.info("🚀 Initializing KRISHN system with Mistral 7B...")
+            logger.info("🚀 Initializing KRISHN system with Mistral 7B (CPU version)...")
             
             # Create cache directory if it doesn't exist
             os.makedirs('/opt/render/.cache/huggingface', exist_ok=True)
             
-            # Load model with optimizations
+            # Load model with CPU optimizations (no quantization)
             model_name = "mistralai/Mistral-7B-Instruct-v0.2"
             
             logger.info("📥 Loading tokenizer...")
@@ -47,15 +47,15 @@ class KRISHNBackend:
             )
             tokenizer.pad_token = tokenizer.eos_token
             
-            logger.info("📥 Loading model (this may take 10-15 minutes)...")
+            logger.info("📥 Loading model for CPU (this will take 15-20 minutes)...")
+            # Load model without quantization for CPU
             model = AutoModelForCausalLM.from_pretrained(
                 model_name,
-                torch_dtype=torch.float16,
+                torch_dtype=torch.float32,  # Use float32 for CPU compatibility
                 device_map="auto",
-                load_in_4bit=True,
                 trust_remote_code=True,
                 cache_dir='/opt/render/.cache/huggingface',
-                low_cpu_mem_usage=True  # Add memory optimization
+                low_cpu_mem_usage=True
             )
             
             logger.info("🔧 Creating pipeline...")
@@ -63,7 +63,7 @@ class KRISHNBackend:
                 "text-generation",
                 model=model,
                 tokenizer=tokenizer,
-                torch_dtype=torch.float16,
+                torch_dtype=torch.float32,
                 device_map="auto"
             )
             
@@ -73,7 +73,7 @@ class KRISHNBackend:
             self.answer_gen = EnhancedAnswerGenerator(self.vector_db, mistral_pipeline)
             
             self.is_initialized = True
-            logger.info("✅ KRISHN system initialized successfully!")
+            logger.info("✅ KRISHN system initialized successfully on CPU!")
             
         except Exception as e:
             logger.error(f"❌ Failed to initialize system: {e}")
@@ -253,7 +253,7 @@ def get_status():
 if __name__ == '__main__':
     # Initialize system on startup
     print("🚀 Starting KRISHN PDF QA System with Mistral 7B...")
-    print("📥 Model will load on first request (may take 10-15 minutes)...")
+    print("📥 Model will load on first request (may take 15-20 minutes)...")
     
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)

@@ -30,36 +30,37 @@ class KRISHNBackend:
         self.uploaded_files = []
         
     def initialize_system(self):
-        """Initialize the KRISHN system with Mistral model (CPU compatible)"""
+        """Initialize the KRISHN system with Phi-3-mini"""
         try:
-            logger.info("🚀 Initializing KRISHN system with Mistral 7B (CPU version)...")
+            logger.info("🚀 Initializing KRISHN system with Phi-3-mini...")
             
             # Create cache directory if it doesn't exist
             os.makedirs('/opt/render/.cache/huggingface', exist_ok=True)
             
-            # Load model with CPU optimizations (no quantization)
-            model_name = "mistralai/Mistral-7B-Instruct-v0.2"
+            # Use Phi-3-mini - Best free-tier model
+            model_name = "microsoft/Phi-3-mini-4k-instruct"
             
             logger.info("📥 Loading tokenizer...")
             tokenizer = AutoTokenizer.from_pretrained(
                 model_name,
-                cache_dir='/opt/render/.cache/huggingface'
+                cache_dir='/opt/render/.cache/huggingface',
+                trust_remote_code=True
             )
             tokenizer.pad_token = tokenizer.eos_token
             
-            logger.info("📥 Loading model for CPU (this will take 15-20 minutes)...")
-            # Load model without quantization for CPU
+            logger.info("📥 Loading Phi-3-mini model...")
+            # Load model with memory optimizations for free tier
             model = AutoModelForCausalLM.from_pretrained(
                 model_name,
-                torch_dtype=torch.float32,  # Use float32 for CPU compatibility
+                torch_dtype=torch.float32,
                 device_map="auto",
-                trust_remote_code=True,
                 cache_dir='/opt/render/.cache/huggingface',
-                low_cpu_mem_usage=True
+                low_cpu_mem_usage=True,
+                trust_remote_code=True
             )
             
             logger.info("🔧 Creating pipeline...")
-            mistral_pipeline = pipeline(
+            phi3_pipeline = pipeline(
                 "text-generation",
                 model=model,
                 tokenizer=tokenizer,
@@ -70,10 +71,10 @@ class KRISHNBackend:
             # Initialize system components
             self.pdf_processor = EnhancedPDFProcessor()
             self.vector_db = HybridVectorDB()
-            self.answer_gen = EnhancedAnswerGenerator(self.vector_db, mistral_pipeline)
+            self.answer_gen = EnhancedAnswerGenerator(self.vector_db, phi3_pipeline)
             
             self.is_initialized = True
-            logger.info("✅ KRISHN system initialized successfully on CPU!")
+            logger.info("✅ KRISHN system with Phi-3-mini initialized successfully!")
             
         except Exception as e:
             logger.error(f"❌ Failed to initialize system: {e}")
@@ -138,7 +139,8 @@ def health_check():
         "status": "healthy",
         "service": "KRISHN Enhanced PDF QA System",
         "initialized": krishn_backend.is_initialized,
-        "model": "Mistral-7B-Instruct-v0.2"
+        "model": "Phi-3-mini-4k-instruct",
+        "capabilities": "Multi-PDF QA, Hybrid Search, Conversation Memory"
     })
 
 @app.route('/api/initialize', methods=['POST'])
@@ -148,8 +150,9 @@ def initialize_system():
         krishn_backend.initialize_system()
         return jsonify({
             "success": krishn_backend.is_initialized,
-            "message": "System initialized successfully" if krishn_backend.is_initialized else "Initialization failed - check logs",
-            "model_loaded": krishn_backend.is_initialized
+            "message": "Phi-3-mini initialized successfully" if krishn_backend.is_initialized else "Initialization failed - check logs",
+            "model_loaded": krishn_backend.is_initialized,
+            "model": "Phi-3-mini-4k-instruct"
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -207,7 +210,8 @@ def ask_question():
             "sources": result['sources'],
             "confidence": result.get('confidence', 0),
             "response_time": result.get('response_time', 0),
-            "search_mode": search_mode
+            "search_mode": search_mode,
+            "model": "Phi-3-mini"
         })
         
     except Exception as e:
@@ -247,13 +251,21 @@ def get_status():
         "initialized": krishn_backend.is_initialized,
         "uploaded_documents": krishn_backend.uploaded_files,
         "system_ready": krishn_backend.is_initialized and len(krishn_backend.uploaded_files) > 0,
-        "model": "Mistral-7B-Instruct-v0.2"
+        "model": "Phi-3-mini-4k-instruct",
+        "capabilities": [
+            "Multi-PDF Comprehension",
+            "Hybrid Search (Vector + Keyword)",
+            "Conversation Memory", 
+            "Source Citations",
+            "Document Analysis"
+        ]
     })
 
 if __name__ == '__main__':
     # Initialize system on startup
-    print("🚀 Starting KRISHN PDF QA System with Mistral 7B...")
-    print("📥 Model will load on first request (may take 15-20 minutes)...")
+    print("🚀 Starting KRISHN PDF QA System with Phi-3-mini...")
+    print("📥 Phi-3-mini will load on first request...")
+    print("💪 Capabilities: Multi-PDF QA, Hybrid Search, Conversation Memory")
     
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
